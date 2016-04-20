@@ -33,7 +33,27 @@
 
         public static Spell.Active SpiderW { get; set; }
 
-        public static AIHeroClient Player { get; set; }
+        public static Obj_AI_Base Monster;
+
+
+        public static readonly string[] SmiteableUnits =
+        {
+            "SRU_Red", "SRU_Blue", "SRU_Dragon", "SRU_Baron",
+            "SRU_Gromp", "SRU_Murkwolf", "SRU_Razorbeak",
+            "SRU_Krug", "Sru_Crab"
+        };
+
+        private static readonly int[] SmiteRed = { 3715, 1415, 1414, 1413, 1412 };
+        private static readonly int[] SmiteBlue = { 3706, 1403, 1402, 1401, 1400 };
+
+
+        private static AIHeroClient Player
+        {
+            get
+            {
+                return ObjectManager.Player;
+            }
+        }
 
         public static Menu ComboMenu { get; private set; }
 
@@ -47,6 +67,7 @@
 
         public static Menu DrawMenu { get; private set; }
 
+        public static Menu SmiteMenu { get; private set; }
 
         private static bool SpiderForm
         {
@@ -107,7 +128,7 @@
             LaneMenu.Add("UseW", new CheckBox("Use W Human"));
             LaneMenu.Add("UseQSpider", new CheckBox("Use Spider Q"));
             LaneMenu.Add("UseWSpider", new CheckBox("Use Spider W"));
-            LaneMenu.Add("UseR", new CheckBox("Switch R"));
+            LaneMenu.Add("UseRl", new CheckBox("Switch R"));
             LaneMenu.Add("lmana", new Slider("Minimum mana", 20, 0, 100));
 
             JungleMenu = Menu.AddSubMenu("JungleClear");
@@ -116,8 +137,32 @@
             JungleMenu.Add("UseW", new CheckBox("Use W"));
             JungleMenu.Add("UseQSpider", new CheckBox("Use Spider Q"));
             JungleMenu.Add("UseWSpider", new CheckBox("Use Spider W"));
-            JungleMenu.Add("UseR", new CheckBox("Switch R"));
+            JungleMenu.Add("useRj", new CheckBox("Switch R"));
+            JungleMenu.Add("useRj2", new CheckBox("Switch R"));
             JungleMenu.Add("jmana", new Slider("Minimum mana", 20, 0, 100));
+
+
+            SmiteMenu = Menu.AddSubMenu("Smite", "Smite");
+            SmiteMenu.AddSeparator();
+            SmiteMenu.Add("smiteActive",
+                new KeyBind("Smite Active (toggle)", true, KeyBind.BindTypes.PressToggle, 'H'));
+            SmiteMenu.AddSeparator();
+            SmiteMenu.Add("useSlowSmite", new CheckBox("KS with Blue Smite"));
+            SmiteMenu.Add("comboWithDuelSmite", new CheckBox("Combo with Red Smite"));
+            SmiteMenu.AddSeparator();
+            SmiteMenu.AddGroupLabel("Camps");
+            SmiteMenu.AddLabel("Epics");
+            SmiteMenu.Add("SRU_Baron", new CheckBox("Baron"));
+            SmiteMenu.Add("SRU_Dragon", new CheckBox("Dragon"));
+            SmiteMenu.AddLabel("Buffs");
+            SmiteMenu.Add("SRU_Blue", new CheckBox("Blue"));
+            SmiteMenu.Add("SRU_Red", new CheckBox("Red"));
+            SmiteMenu.AddLabel("Small Camps");
+            SmiteMenu.Add("SRU_Gromp", new CheckBox("Gromp", false));
+            SmiteMenu.Add("SRU_Murkwolf", new CheckBox("Murkwolf", false));
+            SmiteMenu.Add("SRU_Krug", new CheckBox("Krug", false));
+            SmiteMenu.Add("SRU_Razorbeak", new CheckBox("Razerbeak", false));
+            SmiteMenu.Add("Sru_Crab", new CheckBox("Skuttles", false));
 
             MiscMenu = Menu.AddSubMenu("Misc");
             MiscMenu.AddGroupLabel("Misc Settings");
@@ -145,6 +190,7 @@
             Drawing.OnDraw += OnDraw;
             Gapcloser.OnGapcloser += Gapcloser_OnGapcloser;
             Interrupter.OnInterruptableSpell += OnInterruptableSpell;
+            Game.OnUpdate += SmiteEvent;
         }
 
         private static void Gapcloser_OnGapcloser(AIHeroClient sender, Gapcloser.GapcloserEventArgs e)
@@ -238,7 +284,7 @@
                 Laneclear();
             }
 
-            if (ComboMenu.Get<CheckBox>("forcee").CurrentValue)
+            if (ComboMenu.Get<KeyBind>("forcee").CurrentValue)
             {
                 ForceE();
             }
@@ -488,7 +534,7 @@
             {
                 if (Player.ManaPercent < LaneMenu.Get<Slider>("lmana").CurrentValue)
                 {
-                    if (LaneMenu.Get<CheckBox>("useR").CurrentValue && R.IsReady())
+                    if (LaneMenu.Get<CheckBox>("useRl").CurrentValue && R.IsReady())
                     {
                         R.Cast();
                     }
@@ -503,7 +549,7 @@
                 {
                     W.Cast(minion.Position);
                 }
-                if (LaneMenu.Get<CheckBox>("useR").CurrentValue && (!Q.IsReady() && !W.IsReady()) || Player.ManaPercent < LaneMenu.Get<Slider>("lmana").CurrentValue)
+                if (LaneMenu.Get<CheckBox>("useRl").CurrentValue && (!Q.IsReady() && !W.IsReady()) || Player.ManaPercent < LaneMenu.Get<Slider>("lmana").CurrentValue)
                 {
                     R.Cast();
                 }
@@ -522,9 +568,85 @@
                 }
 
 
-                if (LaneMenu.Get<CheckBox>("useR").CurrentValue && R.IsReady() && Q.IsReady() && !SpiderQ.IsReady() && !SpiderW.IsReady())
+                if (LaneMenu.Get<CheckBox>("useRl").CurrentValue && R.IsReady() && Q.IsReady() && !SpiderW.IsReady())
                 {
                     R.Cast();
+                }
+            }
+        }
+
+        public static void SetSmiteSlot()
+        {
+            SpellSlot smiteSlot;
+            if (SmiteBlue.Any(x => Player.InventoryItems.FirstOrDefault(a => a.Id == (ItemId)x) != null))
+                smiteSlot = Player.GetSpellSlotFromName("s5_summonersmiteplayerganker");
+            else if (
+                SmiteRed.Any(
+                    x => Player.InventoryItems.FirstOrDefault(a => a.Id == (ItemId)x) != null))
+                smiteSlot = Player.GetSpellSlotFromName("s5_summonersmiteduel");
+            else
+                smiteSlot = Player.GetSpellSlotFromName("summonersmite");
+            SmiteSpell = new Spell.Targeted(smiteSlot, 500);
+        }
+
+        public static int GetSmiteDamage()
+        {
+            var level = Player.Level;
+            int[] smitedamage =
+            {
+                20*level + 370,
+                30*level + 330,
+                40*level + 240,
+                50*level + 100
+            };
+            return smitedamage.Max();
+        }
+
+        private static void SmiteEvent(EventArgs args)
+        {
+            SetSmiteSlot();
+            if (!SmiteSpell.IsReady() || Player.IsDead) return;
+            if (SmiteMenu["smiteActive"].Cast<KeyBind>().CurrentValue)
+            {
+                var unit =
+                    EntityManager.MinionsAndMonsters.Monsters
+                        .Where(
+                            a =>
+                                SmiteableUnits.Contains(a.BaseSkinName) && a.Health < GetSmiteDamage() &&
+                                SmiteMenu[a.BaseSkinName].Cast<CheckBox>().CurrentValue)
+                        .OrderByDescending(a => a.MaxHealth)
+                        .FirstOrDefault();
+
+                if (unit != null)
+                {
+                    SmiteSpell.Cast(unit);
+                    return;
+                }
+            }
+            if (SmiteMenu["useSlowSmite"].Cast<CheckBox>().CurrentValue &&
+                SmiteSpell.Handle.Name == "s5_summonersmiteplayerganker")
+            {
+                foreach (
+                    var target in
+                        EntityManager.Heroes.Enemies
+                            .Where(h => h.IsValidTarget(SmiteSpell.Range) && h.Health <= 20 + 8 * Player.Level))
+                {
+                    SmiteSpell.Cast(target);
+                    return;
+                }
+            }
+            if (SmiteMenu["comboWithDuelSmite"].Cast<CheckBox>().CurrentValue &&
+                SmiteSpell.Handle.Name == "s5_summonersmiteduel" &&
+                Orbwalker.ActiveModesFlags.HasFlag(Orbwalker.ActiveModes.Combo))
+            {
+                foreach (
+                    var target in
+                        EntityManager.Heroes.Enemies
+                            .Where(h => h.IsValidTarget(SmiteSpell.Range)).OrderByDescending(TargetSelector.GetPriority)
+                    )
+                {
+                    SmiteSpell.Cast(target);
+                    return;
                 }
             }
         }
@@ -554,7 +676,7 @@
                         W.Cast(minion.Position);
                     }
 
-                    if (JungleMenu.Get<CheckBox>("useR").CurrentValue && (!Q.IsReady() && !W.IsReady()) || Player.ManaPercent < JungleMenu.Get<Slider>("jmana").CurrentValue)
+                    if (JungleMenu.Get<CheckBox>("useRj").CurrentValue && (!Q.IsReady() && !W.IsReady()) || Player.ManaPercent < JungleMenu.Get<Slider>("jmana").CurrentValue)
                     {
                         R.Cast();
                     }
@@ -572,7 +694,7 @@
                         SpiderW.Cast();
                     }
 
-                    if (JungleMenu.Get<CheckBox>("useR").CurrentValue && R.IsReady() && Q.IsReady() && !SpiderQ.IsReady() && !SpiderW.IsReady())
+                    if (JungleMenu.Get<CheckBox>("useRj2").CurrentValue && R.IsReady() && Q.IsReady()  && SpiderW.IsReady())
                     {
                         R.Cast();
                     }
